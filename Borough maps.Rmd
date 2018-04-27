@@ -1,0 +1,147 @@
+---
+title: "EDAV Project"
+author: "Da Som Lee, Srinidhi, Xiaochun Ma, Wenting Feng"
+date: "2018.4.24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE,
+                      message = FALSE)
+```
+
+```{r warning=FALSE, include=FALSE}
+# Import all
+library(ggplot2)
+library(dplyr)
+library(ggmap)
+library(tidyverse)
+library(data.table)
+library(stringr)
+library(lubridate)
+library(tidyr)
+library(ggthemes)
+library(extracat)
+library(mi)
+library(lubridate)
+library(skimr)
+library(evaluate)
+```
+
+
+```{r warning=FALSE, include=FALSE}
+# DL Data Needs
+#Reading it again since I need some additional changes to the original dataset
+vehicle <- read.csv("NYPD_Motor_Vehicle_Collisions.csv", stringsAsFactors = F, header =T, na.strings=c("","","NA"))
+#copy the file
+collision <- copy(vehicle)
+#change chr to date format
+collision$DATE <- as.Date(collision$DATE, "%m/%d/%Y")
+#match weekdays
+collision$WEEKDAY <- weekdays(collision$DATE)
+#find weekday or weekend
+collision<-collision%>%mutate(WEEKDAYORNOT = ifelse(WEEKDAY == "Saturday"|WEEKDAY=="Sunday", "WEEKEND", "WEEKDAY"))
+#extract the hour and convert to int
+collision$HOUR <-as.integer(str_extract(collision$TIME, "^([0-9]{1,2})"))
+```
+
+```{r echo=FALSE, warning=FALSE, results="hide", include=FALSE}
+#separate by weekday 7~9am and weekday 4~7pm
+collision1 <- filter(collision, WEEKDAYORNOT == "WEEKDAY" & HOUR == c(7,8,9))
+collision2 <- filter(collision, WEEKDAYORNOT == "WEEKDAY" & HOUR == c(16,17,18,19))
+#7~9am
+seventonine <- collision1 %>% select(LATITUDE,LONGITUDE,NUMBER.OF.PERSONS.KILLED,NUMBER.OF.PERSONS.INJURED)%>% gather(type, value, 3:4)%>%na.omit()%>% group_by(LATITUDE,LONGITUDE,type) %>% summarise(total=sum(value,na.rm=T)) %>% filter(total!=0)
+#4~7pm
+fourtoseven <- collision2 %>% select(LATITUDE,LONGITUDE,NUMBER.OF.PERSONS.KILLED,NUMBER.OF.PERSONS.INJURED)%>% gather(type, value, 3:4)%>%na.omit()%>% group_by(LATITUDE,LONGITUDE,type) %>% summarise(total=sum(value,na.rm=T)) %>% filter(total!=0)
+#map
+#WARNING: THIS BELOW CODE SOMETIMES SHOWS AN ERROR. KEEP RUNNING THE CODE AND IT WILL WORK 
+evaluate("nyc <- get_map(location = 'New York', maptype = 'roadmap', source='google', zoom=11)")
+```
+
+```{r echo=FALSE, warning=FALSE, results="hide", include=FALSE}
+collision1_2 <- collision1 %>% select(LATITUDE,LONGITUDE,HOUR, BOROUGH,NUMBER.OF.PERSONS.KILLED)%>% gather(type, value, 5)%>%na.omit()%>% group_by(LATITUDE,LONGITUDE, HOUR, BOROUGH, type) %>% summarise(total=sum(value,na.rm=T)) %>% filter(total!=0)
+#weekday rush hours for #ppl killed during 16pm ~ 19pm
+collision2_2 <- collision2 %>% select(LATITUDE,LONGITUDE,HOUR, BOROUGH,NUMBER.OF.PERSONS.KILLED)%>% gather(type, value, 5)%>%na.omit()%>% group_by(LATITUDE,LONGITUDE, HOUR, BOROUGH, type) %>% summarise(total=sum(value,na.rm=T)) %>% filter(total!=0)
+#graph by borough
+```
+
+- Manhattan
+
+```{r echo=FALSE, warning=FALSE, results="hide", include=FALSE}
+#Manhattan map
+evaluate("ny.map <- get_map(location='Central Park, New York, NY', zoom=13)")
+```
+```{r echo=FALSE, fig.height=4, fig.width=6, message=TRUE, warning=FALSE}
+#plot in the map
+ggmap(ny.map) + 
+  geom_point(data=subset(collision2_2,type=="NUMBER.OF.PERSONS.KILLED"), 
+             aes(x=LONGITUDE, y=LATITUDE, colour=total),size=5,alpha=0.5) +
+  ggtitle("NUMBER OF PERSONS KILLED in MANHATTAN")+scale_color_continuous(low = "red", high = "blue") + 
+  labs(x="Longitude", y = "Latitude", subtitle="During 4PM - 7PM on weekdays")
+```
+
+Considering only on weekday evenings rush hour, I could not draw a conclusion on the relatinoship between congestion areas and death counts with the information I had. 
+
+- Queens
+
+```{r echo=FALSE, warning=FALSE, results="hide", include=FALSE}
+evaluate("ny.map2 <- get_map(location='Queens, NY', zoom=12)")
+```
+```{r echo=FALSE, fig.height=4, fig.width=6, message=TRUE, warning=FALSE}
+#plot in the map
+ggmap(ny.map2) + 
+  geom_point(data=subset(collision2_2,type=="NUMBER.OF.PERSONS.KILLED"), 
+             aes(x=LONGITUDE, y=LATITUDE, colour=total),size=5,alpha=0.5) +
+  ggtitle("Number of people KILLED in QUEENS")+scale_color_continuous(low = "red", high = "blue") + 
+  labs(x="Longitude", y = "Latitude", subtitle="During 4PM - 7PM on weekdays")
+```
+
+Near I-495, Horace Harding Expressway and Long Island Expressway had high death counts because these areas are one of the worst traffic corridors. 
+
+- Brooklyn
+
+```{r echo=FALSE, warning=FALSE, results="hide", include=FALSE}
+evaluate("ny.map3 <- get_map(location='Brooklyn, NY', zoom=12)")
+```
+```{r echo=FALSE, fig.height=4, fig.width=6, message=TRUE, warning=FALSE}
+#plot in the map
+ggmap(ny.map3) + 
+  geom_point(data=subset(collision2_2,type=="NUMBER.OF.PERSONS.KILLED"), 
+             aes(x=LONGITUDE, y=LATITUDE, colour=total),size=5,alpha=0.5) +
+  ggtitle("NUMBER OF PERSONS KILLED in BROOKLYN")+scale_color_continuous(low = "red", high = "blue") + 
+  labs(x="Longitude", y = "Latitude", subtitle="During 4PM - 7PM on weekdays")
+```
+
+Though there was a widespread tendency for death collisions, I was able to identify death counts in some areas such as Bedford Stuyvesant, Flatbush Avenue near Ditmars Park, and Sheepsheade Bay Road where were known for issues with the traffic congestion problems. 
+
+- The Bronx
+
+```{r echo=FALSE, warning=FALSE, results="hide", include=FALSE}
+evaluate("ny.map4 <- get_map(location='Bronx, NY', zoom=12)")
+```
+```{r echo=FALSE, fig.height=4, fig.width=6, message=TRUE, warning=FALSE}
+#plot in the map
+ggmap(ny.map4) + 
+  geom_point(data=subset(collision2_2,type=="NUMBER.OF.PERSONS.KILLED"), 
+             aes(x=LONGITUDE, y=LATITUDE, colour=total),size=5,alpha=0.5) +
+  ggtitle("NUMBER OF PERSONS KILLED in BRONX")+scale_color_continuous(low = "red", high = "blue") + 
+  labs(x="Longitude", y = "Latitude", subtitle="During 4PM - 7PM on weekdays")
+```
+
+It was no surprise to see that near East 161st street by Yankee Stadium and Bronx courthouses had double death counts since they were infamously known for traffic problems including congestion and double parking. There have been many plans rolled out to help improve conditions on the busy road such as launching the Bx6 Select Bus Service.
+
+- Staten Island
+
+```{r echo=FALSE, warning=FALSE, results="hide", include=FALSE}
+evaluate("ny.map5 <- get_map(location='Staten Island, NY', zoom=12)")
+```
+```{r echo=FALSE, fig.height=4, fig.width=6, message=TRUE, warning=FALSE}
+#plot in the map
+ggmap(ny.map5) + 
+  geom_point(data=subset(collision2_2,type=="NUMBER.OF.PERSONS.KILLED"), 
+             aes(x=LONGITUDE, y=LATITUDE, colour=total),size=5,alpha=0.5) +
+  ggtitle("NUMBER OF PERSONS KILLED in STATEN ISLAND")+scale_color_continuous(low = "red", high = "blue") + 
+  labs(x="Longitude", y = "Latitude", subtitle="During 4PM - 7PM on weekdays")
+```
+
+Hylan Boulevard, Staten Island's longest commercial roadway, serves as one of borough's primary roadways. Due to the nature and function of this corridor, Hylan Boulevard is frequently congested on weekdays, which marked the highest deat counts in the map. 
